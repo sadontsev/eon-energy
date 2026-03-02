@@ -9,7 +9,7 @@ The integration currently provides cloud-polled monitoring for EON Next accounts
 
 - Platform support: `sensor`, `binary_sensor`, `event`
 - Frontend: sidebar panel + Lovelace card(s)
-- Services exposed: none
+- Services exposed: `add_cost_tracker`, `reset_cost_tracker`, `update_cost_tracker`
 - Options flow: panel visibility, card visibility, backfill configuration
 - Default polling interval: 30 minutes
 - Auth: email/password with refresh token persistence
@@ -35,6 +35,7 @@ The integration currently provides cloud-polled monitoring for EON Next accounts
 - Current unit rate (GBP/kWh, converted from pence)
 - Previous unit rate (last rate that differed from current, for ToU tariffs)
 - Next unit rate (upcoming rate that differs from current, for ToU tariffs)
+- Previous day consumption (kWh) with entry-count/data-completeness attributes
 
 Electricity meters add:
 - Electricity reading (kWh)
@@ -68,6 +69,11 @@ Gas meters add:
 
 - Historical backfill status (state, progress, meter completion)
 
+### Account and tracker sensors
+
+- Account balance (GBP) per account
+- User-defined cost tracker sensors (GBP/day accumulator per tracked HA entity)
+
 ## Implemented Data Retrieval Behavior
 
 - Meter readings: GraphQL account/meter reading queries
@@ -87,6 +93,7 @@ Gas meters add:
 - `eon_next/consumption_history` returns daily consumption from HA recorder statistics for a given meter serial and day range (1–365)
 - Lovelace cards: `eon-next-summary-card`, `eon-next-consumption-card`, `eon-next-consumption-breakdown-card`, `eon-next-cost-card`, `eon-next-reading-card`, `eon-next-ev-card`
 - Cost breakdown card shows a doughnut pie chart of usage charges vs standing charges with day/week/month period switching
+- Cost breakdown card also shows a tracker-powered tracked-vs-untracked usage split for today, with per-tracker list
 - All Lovelace cards include visual config editors (accessible from the card picker UI)
 - Panel and cards share compiled JS bundles served via `async_register_static_paths`
 - Panel meter cards now display consumption bar chart (Chart.js, tree-shaken), cost summary grid, and meter reading section
@@ -102,9 +109,7 @@ Gas meters add:
 
 ## Current Gaps (Not Yet Implemented)
 
-- No cost tracker entities or services
 - No calendar/switch/number/select/time/climate/water_heater platforms
-- No Home Assistant services
 - No configurable update interval (options flow exists for backfill only)
 
 ## Notes
