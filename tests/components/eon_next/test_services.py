@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eon_next.const import DOMAIN
 from custom_components.eon_next.services import async_register_services
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
 
@@ -73,7 +74,7 @@ async def test_add_cost_tracker_with_unknown_meter_raises(hass) -> None:
     _make_entry(hass, serial="meter-a")
     await async_register_services(hass)
 
-    with pytest.raises(ValueError, match="Unable to resolve config entry"):
+    with pytest.raises(ServiceValidationError, match="Unable to resolve config entry"):
         await hass.services.async_call(
             DOMAIN,
             "add_cost_tracker",
@@ -96,7 +97,7 @@ async def test_reset_and_update_cost_tracker_target_entities(hass) -> None:
     tracker_entry = registry.async_get_or_create(
         "sensor",
         DOMAIN,
-        "cost_tracker__washer",
+        f"cost_tracker__{entry.entry_id}__washer",
         config_entry=entry,
         suggested_object_id="washer_cost_tracker",
     )

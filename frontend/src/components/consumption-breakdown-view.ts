@@ -51,6 +51,7 @@ class EonConsumptionBreakdownView extends LitElement {
   private _memoUnitRate: number | null | undefined = undefined
   private _memoStandingCharge: number | null | undefined = undefined
   private _memoMeterType: string | null | undefined = undefined
+  private _memoStatesRef: HomeAssistant['states'] | null = null
   private _memoSegments: PieChartSegment[] = []
   private _memoConsumptionCost = 0
   private _memoStandingCost = 0
@@ -122,7 +123,8 @@ class EonConsumptionBreakdownView extends LitElement {
       this._memoPeriodMode === this._periodMode &&
       this._memoUnitRate === this.meter?.unit_rate &&
       this._memoStandingCharge === this.meter?.standing_charge &&
-      this._memoMeterType === this.meter?.type
+      this._memoMeterType === this.meter?.type &&
+      this._memoStatesRef === this.hass?.states
     ) {
       return
     }
@@ -132,6 +134,7 @@ class EonConsumptionBreakdownView extends LitElement {
     this._memoUnitRate = this.meter?.unit_rate
     this._memoStandingCharge = this.meter?.standing_charge
     this._memoMeterType = this.meter?.type
+    this._memoStatesRef = this.hass?.states ?? null
 
     const rate = this.meter?.unit_rate ?? 0
     const standing = this.meter?.standing_charge ?? 0

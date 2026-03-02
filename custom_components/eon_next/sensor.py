@@ -316,20 +316,9 @@ class PreviousDayConsumptionSensor(EonNextSensorBase):
         self._attr_name = f"{meter.serial} Previous Day Consumption"
         self._attr_device_class = SensorDeviceClass.ENERGY
         self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:history"
         self._attr_unique_id = f"{meter.serial}__previous_day_consumption"
-
-    @property
-    def last_reset(self) -> datetime | None:
-        data = self._meter_data
-        if not data:
-            return None
-        raw = data.get("previous_day_consumption_last_reset")
-        if not raw:
-            return None
-        parsed = dt_util.parse_datetime(str(raw))
-        return dt_util.as_utc(parsed) if parsed else None
 
     @property
     def native_value(self):
@@ -696,7 +685,7 @@ class CostTrackerSensor(RestoreEntity, SensorEntity):
     ) -> None:
         self._manager = manager
         self._tracker_id = tracker_id
-        self._attr_unique_id = f"cost_tracker__{tracker_id}"
+        self._attr_unique_id = f"cost_tracker__{self._manager.entry_id}__{tracker_id}"
         config = self._manager.get_config(tracker_id)
         display_name = config.name if config else tracker_id
         self._attr_name = f"{display_name} Cost Tracker"

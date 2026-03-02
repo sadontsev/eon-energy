@@ -6,6 +6,7 @@ import voluptuous as vol
 
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
@@ -38,7 +39,11 @@ def _extract_tracker_targets(
         unique_id = registry_entry.unique_id or ""
         if not unique_id.startswith("cost_tracker__"):
             continue
-        tracker_id = unique_id.removeprefix("cost_tracker__")
+        tracker_suffix = unique_id.removeprefix("cost_tracker__")
+        current_prefix = f"{registry_entry.config_entry_id}__"
+        if not tracker_suffix.startswith(current_prefix):
+            continue
+        tracker_id = tracker_suffix.removeprefix(current_prefix)
         entry = next(
             (
                 loaded
@@ -86,7 +91,10 @@ async def async_register_services(hass: HomeAssistant) -> None:
                 None,
             )
         if entry is None:
-            raise ValueError("Unable to resolve config entry for the requested meter")
+            raise ServiceValidationError(
+                f"Unable to resolve config entry for meter_serial={meter_serial!r} "
+                f"entry_id={requested_entry_id!r}"
+            )
 
         await entry.runtime_data.cost_trackers.async_add_tracker(
             name=name,

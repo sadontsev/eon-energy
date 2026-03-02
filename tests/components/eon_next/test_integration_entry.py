@@ -166,7 +166,7 @@ def _cost_tracker_entity_id(
     tracker_id: str,
 ) -> str:
     registry = er.async_get(hass)
-    expected_unique_id = f"cost_tracker__{tracker_id}"
+    expected_unique_id = f"cost_tracker__{entry.entry_id}__{tracker_id}"
     for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if registry_entry.unique_id == expected_unique_id:
             return registry_entry.entity_id

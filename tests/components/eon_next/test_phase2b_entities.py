@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,6 +13,16 @@ from custom_components.eon_next.sensor import (
     PreviousDayConsumptionSensor,
 )
 from homeassistant.core import Event, State
+
+_REF_UTC = datetime.now(tz=timezone.utc).replace(
+    hour=12, minute=0, second=0, microsecond=0
+)
+_YESTERDAY_MIDNIGHT = (_REF_UTC - timedelta(days=1)).replace(
+    hour=0,
+    minute=0,
+    second=0,
+    microsecond=0,
+).isoformat()
 
 
 def _make_coordinator(data):
@@ -37,14 +47,13 @@ def test_previous_day_consumption_sensor() -> None:
                 "previous_day_consumption": 12.345,
                 "previous_day_consumption_entry_count": 46,
                 "previous_day_consumption_data_complete": True,
-                "previous_day_consumption_last_reset": "2026-03-01T00:00:00+00:00",
+                "previous_day_consumption_last_reset": _YESTERDAY_MIDNIGHT,
             }
         }
     )
     sensor = PreviousDayConsumptionSensor(coordinator, meter)
     assert sensor.native_value == pytest.approx(12.345)
     assert sensor.extra_state_attributes == {"entry_count": 46, "data_complete": True}
-    assert sensor.last_reset is not None
 
 
 def test_account_balance_sensor() -> None:
@@ -54,14 +63,14 @@ def test_account_balance_sensor() -> None:
         {
             f"account::{account_number}": {
                 "balance": -12.34,
-                "last_updated": "2026-03-02T12:00:00+00:00",
+                "last_updated": _REF_UTC.isoformat(),
             }
         }
     )
     sensor = AccountBalanceSensor(coordinator, account_number)
     assert sensor.native_value == pytest.approx(-12.34)
     assert sensor.extra_state_attributes["account_number"] == account_number
-    assert sensor.extra_state_attributes["last_updated"] == "2026-03-02T12:00:00+00:00"
+    assert sensor.extra_state_attributes["last_updated"] == _REF_UTC.isoformat()
 
 
 @pytest.mark.asyncio
@@ -84,13 +93,13 @@ async def test_cost_tracker_updates_from_energy_state_changes(hass) -> None:
         "sensor.washer_energy",
         "1.0",
         {"unit_of_measurement": "kWh"},
-        last_updated=datetime(2026, 3, 2, 9, 0, tzinfo=timezone.utc),
+        last_updated=_REF_UTC.replace(hour=9, minute=0),
     )
     second = State(
         "sensor.washer_energy",
         "1.6",
         {"unit_of_measurement": "kWh"},
-        last_updated=datetime(2026, 3, 2, 9, 30, tzinfo=timezone.utc),
+        last_updated=_REF_UTC.replace(hour=9, minute=30),
     )
 
     await manager._async_handle_state_change(  # noqa: SLF001
