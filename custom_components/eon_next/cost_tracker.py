@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import logging
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, HomeAssistant, State, callback

@@ -161,6 +161,7 @@ async def async_import_consumption_statistics(
     """
     from homeassistant.components.recorder.models import (
         StatisticData,
+        StatisticMeanType,
         StatisticMetaData,
     )
     from homeassistant.components.recorder.statistics import (
@@ -181,22 +182,15 @@ async def async_import_consumption_statistics(
         return
     fuel = "gas" if meter_type == METER_TYPE_GAS else "electricity"
 
-    metadata_dict: dict[str, Any] = {
-        "has_sum": True,
-        "name": f"{meter_serial} {fuel.title()} Consumption",
-        "source": DOMAIN,
-        "statistic_id": statistic_id,
-        "unit_of_measurement": UnitOfEnergy.KILO_WATT_HOUR,
-        "unit_class": "energy",
-    }
-
-    # Use mean_type (modern HA) with has_mean fallback (older HA).
-    try:
-        from homeassistant.components.recorder.models import StatisticMeanType
-
-        metadata_dict["mean_type"] = StatisticMeanType.NONE
-    except ImportError:
-        metadata_dict["has_mean"] = False
+    metadata = StatisticMetaData(
+        has_sum=True,
+        mean_type=StatisticMeanType.NONE,
+        name=f"{meter_serial} {fuel.title()} Consumption",
+        source=DOMAIN,
+        statistic_id=statistic_id,
+        unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        unit_class="energy",
+    )
 
     sorted_hours = sorted(hourly.keys())
     if not sorted_hours:
@@ -222,9 +216,7 @@ async def async_import_consumption_statistics(
     if not statistics:
         return
 
-    async_add_external_statistics(
-        hass, StatisticMetaData(**metadata_dict), statistics
-    )
+    async_add_external_statistics(hass, metadata, statistics)
     _LOGGER.debug(
         "Imported %d hourly statistics for %s",
         len(statistics),
