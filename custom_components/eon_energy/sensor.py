@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import datetime
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory, UnitOfEnergy
+from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -64,7 +67,7 @@ class EonHeatCurrentPeriodSensor(EonEnergySensorBase):
     _attr_name = "E.ON Heat This Period"
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:heat-wave"
 
     def __init__(self, coordinator, account_number):
@@ -74,6 +77,17 @@ class EonHeatCurrentPeriodSensor(EonEnergySensorBase):
     @property
     def native_value(self):
         return self._data.get("current_kwh")
+
+    @property
+    def last_reset(self) -> datetime.datetime | None:
+        """Return the start of the current billing period as last_reset."""
+        raw = self._data.get("current_period_start")
+        if not raw:
+            return None
+        try:
+            return dt_util.parse_datetime(raw) or None
+        except Exception:  # pylint: disable=broad-except
+            return None
 
     @property
     def extra_state_attributes(self):
@@ -89,7 +103,7 @@ class EonHeatCurrentCostSensor(EonEnergySensorBase):
     _attr_name = "E.ON Heat This Period Cost"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "GBP"
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_icon = "mdi:cash"
 
     def __init__(self, coordinator, account_number):
@@ -99,6 +113,16 @@ class EonHeatCurrentCostSensor(EonEnergySensorBase):
     @property
     def native_value(self):
         return self._data.get("current_cost_gbp")
+
+    @property
+    def last_reset(self) -> datetime.datetime | None:
+        raw = self._data.get("current_period_start")
+        if not raw:
+            return None
+        try:
+            return dt_util.parse_datetime(raw) or None
+        except Exception:  # pylint: disable=broad-except
+            return None
 
     @property
     def extra_state_attributes(self):
