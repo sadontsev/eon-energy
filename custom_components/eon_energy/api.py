@@ -1,4 +1,4 @@
-"""E.ON Energy API client — Auth0 authentication + consumption REST API."""
+"""E.ON Energy API client — Auth0 token refresh + consumption REST API."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from .const import (
     API_BASE,
     API_CLIENT_ID,
     API_CLIENT_SECRET,
-    AUTH0_AUDIENCE,
     AUTH0_CLIENT_ID,
     AUTH0_DOMAIN,
 )
@@ -39,12 +38,30 @@ def _decode_jwt_payload(token: str) -> dict[str, Any]:
         if len(parts) != 3:
             return {}
         payload = parts[1]
-        # Pad to a multiple of 4
         payload += "=" * (-len(payload) % 4)
         decoded = base64.urlsafe_b64decode(payload)
         return json.loads(decoded)
     except Exception:  # pylint: disable=broad-except
         return {}
+
+
+def _is_jwt(token: str) -> bool:
+    return len(token.split(".")) == 3
+
+
+def _extract_account_number(payload: dict[str, Any]) -> str | None:
+    """Extract account number from a decoded JWT payload."""
+    for key in ("accountNumber", "account_number", "accountId", "customerId"):
+        val = payload.get(key)
+        if val:
+            return str(val)
+    # Namespaced claims (e.g. "https://eon.com/accountNumber")
+    for _k, v in payload.items():
+        if isinstance(v, dict):
+            for inner_key in ("accountNumber", "account_number"):
+                if inner_key in v:
+                    return str(v[inner_key])
+    return None
 
 
 class EonEnergyApi:
@@ -65,7 +82,7 @@ class EonEnergyApi:
         token_expiry: float,
         account_number: str,
     ) -> None:
-        """Restore tokens from config entry (avoids login on startup)."""
+        """Restore tokens from config entry (avoids re-auth on startup)."""
         self._access_token = access_token
         self._refresh_token = refresh_token
         self._token_expiry = token_expiry
@@ -93,50 +110,13 @@ class EonEnergyApi:
     # Authentication
     # ------------------------------------------------------------------
 
-    async def async_login(self, email: str, password: str) -> dict[str, Any]:
-        """Authenticate via Auth0 ROPC grant.
-
-        Returns token dict with access_token, refresh_token, expires_in.
-        Raises EonEnergyAuthError on 401/403.
-        Raises EonEnergyApiError on other failures.
-        """
-        url = f"https://{AUTH0_DOMAIN}/oauth/token"
-        payload = {
-            "grant_type": "password",
-            "username": email,
-            "password": password,
-            "client_id": AUTH0_CLIENT_ID,
-            "scope": "openid profile email offline_access",
-            "audience": AUTH0_AUDIENCE,
-        }
-        session = self._get_session()
-        try:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status in (401, 403):
-                    body = await resp.text()
-                    _LOGGER.debug("Auth0 rejected credentials: %s %s", resp.status, body)
-                    raise EonEnergyAuthError(
-                        f"Auth0 rejected credentials (HTTP {resp.status})"
-                    )
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise EonEnergyApiError(
-                        f"Auth0 token request failed: HTTP {resp.status} — {body}"
-                    )
-                data = await resp.json()
-        except (aiohttp.ClientError, TimeoutError) as err:
-            raise EonEnergyApiError(f"Network error during login: {err}") from err
-
-        self._store_tokens(data)
-        return data
-
     async def async_refresh_token(self) -> dict[str, Any]:
         """Refresh the access token using the stored refresh token.
 
         Raises EonEnergyAuthError if the refresh token is invalid/expired.
         """
         if not self._refresh_token:
-            raise EonEnergyAuthError("No refresh token available")
+            raise EonEnergyAuthError("No refresh token available — re-authenticate")
 
         url = f"https://{AUTH0_DOMAIN}/oauth/token"
         payload = {
@@ -146,7 +126,9 @@ class EonEnergyApi:
         }
         session = self._get_session()
         try:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            async with session.post(
+                url, json=payload, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
                 if resp.status in (401, 403):
                     body = await resp.text()
                     _LOGGER.debug("Refresh token rejected: %s %s", resp.status, body)
@@ -163,39 +145,64 @@ class EonEnergyApi:
         self._store_tokens(data)
         return data
 
+    async def async_validate_refresh_token(self, refresh_token: str) -> str:
+        """Validate a refresh token and return the account_number.
+
+        Called by the config flow when the user pastes a refresh token.
+        Raises EonEnergyAuthError if the token is rejected.
+        """
+        self._refresh_token = refresh_token
+        self._access_token = None
+        await self.async_refresh_token()
+        if not self._account_number:
+            _LOGGER.warning(
+                "Refresh token valid but account_number not found in JWT — "
+                "inspect the HA log at DEBUG level to see the raw token payload"
+            )
+            # Use a stable placeholder so the config entry has a unique_id
+            self._account_number = "eon_energy_unknown"
+        return self._account_number
+
     def _store_tokens(self, data: dict[str, Any]) -> None:
         """Store tokens from an Auth0 response dict."""
-        self._access_token = data.get("access_token")
-        # Auth0 may return a new refresh token (rotation) or omit it
+        access = data.get("access_token", "")
+        id_tok = data.get("id_token", "")
+
+        # Auth0 PKCE without audience returns an opaque access_token.
+        # Fall back to id_token (which is always a JWT) as the Bearer.
+        if access and _is_jwt(access):
+            self._access_token = access
+        elif id_tok and _is_jwt(id_tok):
+            _LOGGER.debug("access_token is opaque; using id_token as Bearer")
+            self._access_token = id_tok
+        else:
+            self._access_token = access or id_tok
+
         new_rt = data.get("refresh_token")
         if new_rt:
             self._refresh_token = new_rt
+
         expires_in = data.get("expires_in", 36000)
         self._token_expiry = time.monotonic() + float(expires_in)
 
-        # Extract account number from JWT payload
-        if self._access_token:
-            payload = _decode_jwt_payload(self._access_token)
-            for key in ("account_number", "accountNumber", "accountId", "customerId"):
-                val = payload.get(key)
-                if val:
-                    self._account_number = str(val)
-                    break
-            if not self._account_number:
-                # Look in nested "https://eon.com/..." namespace claims
-                for k, v in payload.items():
-                    if isinstance(v, dict):
-                        for inner_key in ("account_number", "accountNumber"):
-                            if inner_key in v:
-                                self._account_number = str(v[inner_key])
-                                break
-                    if self._account_number:
-                        break
-            _LOGGER.debug(
-                "Tokens stored; account_number=%s expiry_in=%.0fs",
-                self._account_number,
-                float(data.get("expires_in", 0)),
-            )
+        # Extract account number — try access_token JWT first, then id_token
+        for tok in (self._access_token, id_tok):
+            if not tok:
+                continue
+            payload = _decode_jwt_payload(tok)
+            if not payload:
+                continue
+            _LOGGER.debug("JWT payload fields: %s", list(payload.keys()))
+            acct = _extract_account_number(payload)
+            if acct:
+                self._account_number = acct
+                break
+
+        _LOGGER.debug(
+            "Tokens stored; account_number=%s expires_in=%.0fs",
+            self._account_number,
+            float(data.get("expires_in", 0)),
+        )
 
         if self._token_update_callback:
             self._token_update_callback(
@@ -208,31 +215,15 @@ class EonEnergyApi:
     async def async_get_token(self) -> str:
         """Return a valid access token, refreshing if necessary."""
         if not self._access_token:
-            raise EonEnergyAuthError("Not authenticated — call async_login first")
+            raise EonEnergyAuthError("Not authenticated — re-authenticate via HA UI")
 
-        needs_refresh = time.monotonic() >= (self._token_expiry - TOKEN_EXPIRY_BUFFER_SECONDS)
-        if needs_refresh:
+        if time.monotonic() >= (self._token_expiry - TOKEN_EXPIRY_BUFFER_SECONDS):
             _LOGGER.debug("Access token near expiry, refreshing")
             await self.async_refresh_token()
 
         if not self._access_token:
             raise EonEnergyAuthError("No access token after refresh")
         return self._access_token
-
-    # ------------------------------------------------------------------
-    # Validation (used by config flow)
-    # ------------------------------------------------------------------
-
-    async def async_validate_credentials(self, email: str, password: str) -> str:
-        """Login and return account_number, or raise on failure."""
-        await self.async_login(email, password)
-        if not self._account_number:
-            _LOGGER.warning(
-                "Login succeeded but account_number not found in JWT — "
-                "using email as fallback unique_id"
-            )
-            self._account_number = email
-        return self._account_number
 
     # ------------------------------------------------------------------
     # Data API
@@ -261,15 +252,16 @@ class EonEnergyApi:
                 headers=self._api_headers(token),
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
+                body = await resp.text()
+                _LOGGER.debug("Consumption API response: HTTP %s — %s", resp.status, body)
                 if resp.status in (401, 403):
                     raise EonEnergyAuthError(
                         f"Consumption API auth failed: HTTP {resp.status}"
                     )
                 if resp.status != 200:
-                    body = await resp.text()
                     raise EonEnergyApiError(
                         f"Consumption API error: HTTP {resp.status} — {body}"
                     )
-                return await resp.json()
+                return json.loads(body)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise EonEnergyApiError(f"Network error fetching consumption: {err}") from err

@@ -16,14 +16,14 @@ from .api import EonEnergyApi, EonEnergyAuthError, EonEnergyApiError
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_ACCOUNT_NUMBER,
-    CONF_EMAIL,
-    CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRY,
     DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+CONF_REFRESH_TOKEN_INPUT = "refresh_token"
 
 
 class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -34,16 +34,14 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._reauth_entry: ConfigEntry | None = None
 
-    async def _do_login(self, email: str, password: str) -> dict[str, Any]:
-        """Attempt login; return token data dict on success."""
+    async def _validate_token(self, refresh_token: str) -> dict[str, Any]:
+        """Validate the refresh token; return entry data dict on success."""
         api = EonEnergyApi()
         try:
-            account_number = await api.async_validate_credentials(email, password)
+            account_number = await api.async_validate_refresh_token(refresh_token)
             return {
-                CONF_EMAIL: email,
-                CONF_PASSWORD: password,
+                CONF_REFRESH_TOKEN: api._refresh_token,  # may be rotated
                 CONF_ACCESS_TOKEN: api._access_token,
-                CONF_REFRESH_TOKEN: api._refresh_token,
                 CONF_TOKEN_EXPIRY: api._token_expiry,
                 CONF_ACCOUNT_NUMBER: account_number,
             }
@@ -51,21 +49,19 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await api.async_close()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        """Show email/password form and validate on submit."""
+        """Show the refresh-token entry form."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            email = user_input[CONF_EMAIL].strip().lower()
-            password = user_input[CONF_PASSWORD]
-
+            refresh_token = user_input[CONF_REFRESH_TOKEN_INPUT].strip()
             try:
-                entry_data = await self._do_login(email, password)
+                entry_data = await self._validate_token(refresh_token)
             except EonEnergyAuthError:
                 errors["base"] = "invalid_auth"
             except EonEnergyApiError:
                 errors["base"] = "cannot_connect"
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected error during E.ON Energy login")
+                _LOGGER.exception("Unexpected error during E.ON Energy setup")
                 errors["base"] = "unknown"
             else:
                 account_number = entry_data[CONF_ACCOUNT_NUMBER]
@@ -76,10 +72,7 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_EMAIL): cv.string,
-                    vol.Required(CONF_PASSWORD): cv.string,
-                }
+                {vol.Required(CONF_REFRESH_TOKEN_INPUT): cv.string}
             ),
             errors=errors,
         )
@@ -96,20 +89,16 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ):
-        """Handle re-auth form."""
+        """Handle re-auth form (paste a new refresh token)."""
         errors: dict[str, str] = {}
 
         if self._reauth_entry is None:
             return self.async_abort(reason="unknown")
 
-        existing_email = self._reauth_entry.data.get(CONF_EMAIL, "")
-
         if user_input is not None:
-            email = user_input[CONF_EMAIL].strip().lower()
-            password = user_input[CONF_PASSWORD]
-
+            refresh_token = user_input[CONF_REFRESH_TOKEN_INPUT].strip()
             try:
-                entry_data = await self._do_login(email, password)
+                entry_data = await self._validate_token(refresh_token)
             except EonEnergyAuthError:
                 errors["base"] = "invalid_auth"
             except EonEnergyApiError:
@@ -127,10 +116,7 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_EMAIL, default=existing_email): cv.string,
-                    vol.Required(CONF_PASSWORD): cv.string,
-                }
+                {vol.Required(CONF_REFRESH_TOKEN_INPUT): cv.string}
             ),
             errors=errors,
         )

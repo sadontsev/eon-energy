@@ -11,8 +11,6 @@ from .api import EonEnergyApi, EonEnergyApiError, EonEnergyAuthError
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_ACCOUNT_NUMBER,
-    CONF_EMAIL,
-    CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
     CONF_TOKEN_EXPIRY,
     PLATFORMS,
@@ -47,40 +45,28 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
     api.set_token_update_callback(_on_tokens_updated)
 
-    # Restore stored tokens if available; fall back to password login
-    stored_access = entry.data.get(CONF_ACCESS_TOKEN)
-    stored_refresh = entry.data.get(CONF_REFRESH_TOKEN)
+    stored_access = entry.data.get(CONF_ACCESS_TOKEN, "")
+    stored_refresh = entry.data.get(CONF_REFRESH_TOKEN, "")
     stored_expiry = entry.data.get(CONF_TOKEN_EXPIRY, 0.0)
     stored_account = entry.data.get(CONF_ACCOUNT_NUMBER, "")
 
-    if stored_access and stored_refresh:
-        api.restore_tokens(stored_access, stored_refresh, stored_expiry, stored_account)
-        # Attempt a token refresh to validate / extend the session
-        try:
-            await api.async_refresh_token()
-            _LOGGER.debug("E.ON Energy: session restored via stored refresh token")
-        except EonEnergyAuthError:
-            _LOGGER.debug(
-                "E.ON Energy: stored refresh token invalid — falling back to credentials"
-            )
-            # Clear tokens so the password path runs
-            api._access_token = None
-            api._refresh_token = None
-        except EonEnergyApiError as err:
-            await api.async_close()
-            raise ConfigEntryNotReady(f"E.ON Energy API unreachable: {err}") from err
+    if not stored_refresh:
+        # No refresh token stored — the user must go through config flow again
+        await api.async_close()
+        raise ConfigEntryAuthFailed("No refresh token — please re-authenticate")
 
-    if not api._access_token:
-        email = entry.data.get(CONF_EMAIL, "")
-        password = entry.data.get(CONF_PASSWORD, "")
-        try:
-            await api.async_login(email, password)
-        except EonEnergyAuthError as err:
-            await api.async_close()
-            raise ConfigEntryAuthFailed(str(err)) from err
-        except EonEnergyApiError as err:
-            await api.async_close()
-            raise ConfigEntryNotReady(f"E.ON Energy API unreachable: {err}") from err
+    api.restore_tokens(stored_access, stored_refresh, stored_expiry, stored_account)
+
+    # Validate session: refresh the token before first coordinator run
+    try:
+        await api.async_refresh_token()
+        _LOGGER.debug("E.ON Energy: session established via stored refresh token")
+    except EonEnergyAuthError as err:
+        await api.async_close()
+        raise ConfigEntryAuthFailed(str(err)) from err
+    except EonEnergyApiError as err:
+        await api.async_close()
+        raise ConfigEntryNotReady(f"E.ON Energy API unreachable: {err}") from err
 
     coordinator = EonEnergyCoordinator(hass, api)
 

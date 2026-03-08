@@ -3,23 +3,21 @@
     "step": {
       "user": {
         "title": "E.ON Energy",
-        "description": "Enter your E.ON Energy account credentials (eonenergy.com).",
+        "description": "Paste your Auth0 refresh token below.\n\nHow to get it:\n1. Log in to www.eonenergy.com in Chrome/Firefox\n2. Open DevTools → Network tab (F12)\n3. Filter requests by **/oauth/token**\n4. Find the POST to auth.eonenergy.com — click it\n5. Open the **Response** tab\n6. Copy the **refresh_token** value (long string starting with the provider prefix)\n\nThe integration will use this token to fetch new access tokens automatically.",
         "data": {
-          "email": "Email address",
-          "password": "Password"
+          "refresh_token": "Refresh token"
         }
       },
       "reauth_confirm": {
         "title": "Re-authenticate E.ON Energy",
-        "description": "Your E.ON Energy session has expired. Please re-enter your credentials.",
+        "description": "Your E.ON Energy session has expired. Paste a new refresh token.\n\nLog in to www.eonenergy.com, open DevTools → Network → filter /oauth/token, copy the refresh_token from the POST response.",
         "data": {
-          "email": "Email address",
-          "password": "Password"
+          "refresh_token": "Refresh token"
         }
       }
     },
     "error": {
-      "invalid_auth": "Invalid email or password. Please check your E.ON Energy credentials.",
+      "invalid_auth": "The refresh token was rejected. Make sure you copied the full refresh_token value from the /oauth/token response.",
       "cannot_connect": "Unable to reach the E.ON Energy service. Check your internet connection and try again.",
       "unknown": "An unexpected error occurred. Check the Home Assistant logs for details."
     },
