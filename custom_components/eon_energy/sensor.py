@@ -29,6 +29,8 @@ async def async_setup_entry(
     acct = config_entry.data.get("account_number", "")
 
     async_add_entities([
+        EonHeatTotalConsumptionSensor(coordinator, acct),
+        EonHeatTotalChargeSensor(coordinator, acct),
         EonHeatCurrentKwhSensor(coordinator, acct),
         EonHeatCurrentChargeSensor(coordinator, acct),
         EonHeatPreviousKwhSensor(coordinator, acct),
@@ -70,6 +72,63 @@ class _EonBase(CoordinatorEntity, SensorEntity):
             return dt_util.parse_datetime(raw) or None
         except Exception:  # pylint: disable=broad-except
             return None
+
+
+# ---------------------------------------------------------------------------
+# Cumulative totals (sum of all periods returned by the API)
+# ---------------------------------------------------------------------------
+
+class EonHeatTotalConsumptionSensor(_EonBase):
+    """Total heating energy across all billing periods from the API (kWh).
+
+    Suitable for the Energy Dashboard — monotonically increases as new
+    periods are added each month.
+    """
+    _attr_name = "E.ON Heat Consumption"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:heat-wave"
+
+    def __init__(self, coordinator, acct):
+        super().__init__(coordinator, acct)
+        self._attr_unique_id = f"{acct}__eon_heat_total_kwh"
+
+    @property
+    def native_value(self):
+        return self._data.get("total_kwh")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "data_from": self._data.get("data_from"),
+            "data_to": self._data.get("data_to"),
+        }
+
+
+class EonHeatTotalChargeSensor(_EonBase):
+    """Total heating charge across all billing periods from the API (GBP)."""
+
+    _attr_name = "E.ON Heat Total Charge"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "GBP"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:cash-multiple"
+
+    def __init__(self, coordinator, acct):
+        super().__init__(coordinator, acct)
+        self._attr_unique_id = f"{acct}__eon_heat_total_charge"
+
+    @property
+    def native_value(self):
+        return self._data.get("total_charge_gbp")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "data_from": self._data.get("data_from"),
+            "data_to": self._data.get("data_to"),
+        }
 
 
 # ---------------------------------------------------------------------------

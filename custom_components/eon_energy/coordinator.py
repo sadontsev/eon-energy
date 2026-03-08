@@ -132,6 +132,20 @@ def _parse_consumption(raw: Any) -> dict[str, Any]:
     if len(periods) >= 2:
         _extract(periods[-2], "previous")
 
+    # Cumulative totals across all periods returned by the API
+    total_kwh = sum(
+        f for p in periods
+        if (f := _safe_float(p.get("consumption", {}).get("amount"))) is not None
+    )
+    total_charge = sum(
+        f for p in periods
+        if (f := _safe_float(p.get("consumptionCharge", {}).get("amount"))) is not None
+    )
+    result["total_kwh"] = round(total_kwh, 3)
+    result["total_charge_gbp"] = round(total_charge, 2)
+    result["data_from"] = periods[0].get("periodStart")
+    result["data_to"] = periods[-1].get("periodEnd")
+
     _LOGGER.debug("Parsed consumption: %s", result)
     return result
 
