@@ -14,7 +14,9 @@ CONF_ACCOUNT_NUMBER = "account_number"
 CONF_STORED_CONSUMPTION = "stored_consumption"  # last successful fetch, persisted as dict
 
 # Options keys (user-configurable)
-CONF_FETCH_DAY = "fetch_day"             # day-of-month on which to call the API (1–28)
-DEFAULT_FETCH_DAY = 10                   # sensible default: mid-month, after billing closes
+CONF_FETCH_DAY = "fetch_day"                     # day-of-month on which to call the API (1–28)
+DEFAULT_FETCH_DAY = 10                           # sensible default: mid-month, after billing closes
+CONF_MONTHLY_SERVICE_CHARGE = "monthly_service_charge"  # fixed monthly fee in GBP
+DEFAULT_MONTHLY_SERVICE_CHARGE = 0.0
 
 PLATFORMS = ["sensor"]

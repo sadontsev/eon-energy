@@ -12,9 +12,11 @@ from .const import (
     CONF_ACCOUNT_NUMBER,
     CONF_BEARER_TOKEN,
     CONF_FETCH_DAY,
+    CONF_MONTHLY_SERVICE_CHARGE,
     CONF_STORED_CONSUMPTION,
     CONF_TOKEN_EXPIRY,
     DEFAULT_FETCH_DAY,
+    DEFAULT_MONTHLY_SERVICE_CHARGE,
     PLATFORMS,
 )
 from .coordinator import EonEnergyCoordinator
@@ -30,6 +32,9 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     account_number = entry.data.get(CONF_ACCOUNT_NUMBER, "")
     stored_data = entry.data.get(CONF_STORED_CONSUMPTION, {})
     fetch_day = entry.options.get(CONF_FETCH_DAY, DEFAULT_FETCH_DAY)
+    monthly_service_charge = entry.options.get(
+        CONF_MONTHLY_SERVICE_CHARGE, DEFAULT_MONTHLY_SERVICE_CHARGE
+    )
 
     api = EonEnergyApi()
     if bearer_token:
@@ -46,6 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         hass,
         api,
         fetch_day=fetch_day,
+        monthly_service_charge=monthly_service_charge,
         stored_data=stored_data,
         on_data_persisted=_persist_data,
     )
@@ -71,11 +77,18 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
 
 async def _async_options_updated(hass: HomeAssistant, entry) -> None:
-    """Handle options update — propagate new fetch_day to the coordinator."""
+    """Handle options update — propagate new settings to the coordinator."""
     coordinator: EonEnergyCoordinator = entry.runtime_data
     fetch_day = entry.options.get(CONF_FETCH_DAY, DEFAULT_FETCH_DAY)
-    coordinator.update_fetch_day(fetch_day)
-    _LOGGER.debug("E.ON Energy: fetch day updated to %d", fetch_day)
+    monthly_service_charge = entry.options.get(
+        CONF_MONTHLY_SERVICE_CHARGE, DEFAULT_MONTHLY_SERVICE_CHARGE
+    )
+    coordinator.update_options(fetch_day, monthly_service_charge)
+    _LOGGER.debug(
+        "E.ON Energy: options updated — fetch_day=%d, monthly_service_charge=%.2f",
+        fetch_day,
+        monthly_service_charge,
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
