@@ -27,14 +27,13 @@ async def async_setup_entry(
     coordinator: EonEnergyCoordinator = config_entry.runtime_data
     account_number: str = config_entry.data.get("account_number", "")
 
-    entities: list[SensorEntity] = [
-        EonEnergyElectricityTodaySensor(coordinator, account_number),
-        EonEnergyElectricityYesterdaySensor(coordinator, account_number),
-        EonEnergyGasTodaySensor(coordinator, account_number),
-        EonEnergyGasYesterdaySensor(coordinator, account_number),
+    async_add_entities([
+        EonHeatCurrentPeriodSensor(coordinator, account_number),
+        EonHeatCurrentCostSensor(coordinator, account_number),
+        EonHeatPreviousPeriodSensor(coordinator, account_number),
+        EonHeatPreviousCostSensor(coordinator, account_number),
         EonEnergyAccountSensor(coordinator, account_number),
-    ]
-    async_add_entities(entities)
+    ])
 
 
 class EonEnergySensorBase(CoordinatorEntity, SensorEntity):
@@ -52,83 +51,111 @@ class EonEnergySensorBase(CoordinatorEntity, SensorEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self._account_number)},
-            "name": "E.ON Energy",
+            "name": "E.ON Heat",
             "manufacturer": "E.ON Energy",
-            "model": "Energy Account",
+            "model": "Heat Pump Account",
             "entry_type": "service",
         }
 
 
-class EonEnergyElectricityTodaySensor(EonEnergySensorBase):
-    """Electricity consumption today (kWh)."""
+class EonHeatCurrentPeriodSensor(EonEnergySensorBase):
+    """Energy consumption for the current billing period (kWh)."""
 
-    _attr_name = "E.ON Electricity Today"
+    _attr_name = "E.ON Heat This Period"
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_icon = "mdi:lightning-bolt"
+    _attr_icon = "mdi:heat-wave"
 
     def __init__(self, coordinator, account_number):
         super().__init__(coordinator, account_number)
-        self._attr_unique_id = f"{account_number}__eon_electricity_today"
+        self._attr_unique_id = f"{account_number}__eon_heat_current_kwh"
 
     @property
     def native_value(self):
-        return self._data.get("electricity_today_kwh")
-
-
-class EonEnergyElectricityYesterdaySensor(EonEnergySensorBase):
-    """Electricity consumption yesterday (kWh)."""
-
-    _attr_name = "E.ON Electricity Yesterday"
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:lightning-bolt-outline"
-
-    def __init__(self, coordinator, account_number):
-        super().__init__(coordinator, account_number)
-        self._attr_unique_id = f"{account_number}__eon_electricity_yesterday"
+        return self._data.get("current_kwh")
 
     @property
-    def native_value(self):
-        return self._data.get("electricity_yesterday_kwh")
+    def extra_state_attributes(self):
+        return {
+            "period_start": self._data.get("current_period_start"),
+            "period_end": self._data.get("current_period_end"),
+        }
 
 
-class EonEnergyGasTodaySensor(EonEnergySensorBase):
-    """Gas consumption today (kWh)."""
+class EonHeatCurrentCostSensor(EonEnergySensorBase):
+    """Cost for the current billing period (GBP)."""
 
-    _attr_name = "E.ON Gas Today"
-    _attr_device_class = SensorDeviceClass.ENERGY
-    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_name = "E.ON Heat This Period Cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "GBP"
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
-    _attr_icon = "mdi:fire"
+    _attr_icon = "mdi:cash"
 
     def __init__(self, coordinator, account_number):
         super().__init__(coordinator, account_number)
-        self._attr_unique_id = f"{account_number}__eon_gas_today"
+        self._attr_unique_id = f"{account_number}__eon_heat_current_cost"
 
     @property
     def native_value(self):
-        return self._data.get("gas_today_kwh")
+        return self._data.get("current_cost_gbp")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "period_start": self._data.get("current_period_start"),
+            "period_end": self._data.get("current_period_end"),
+        }
 
 
-class EonEnergyGasYesterdaySensor(EonEnergySensorBase):
-    """Gas consumption yesterday (kWh)."""
+class EonHeatPreviousPeriodSensor(EonEnergySensorBase):
+    """Energy consumption for the previous billing period (kWh)."""
 
-    _attr_name = "E.ON Gas Yesterday"
+    _attr_name = "E.ON Heat Last Period"
     _attr_device_class = SensorDeviceClass.ENERGY
     _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:fire-off"
+    _attr_icon = "mdi:heat-wave"
 
     def __init__(self, coordinator, account_number):
         super().__init__(coordinator, account_number)
-        self._attr_unique_id = f"{account_number}__eon_gas_yesterday"
+        self._attr_unique_id = f"{account_number}__eon_heat_previous_kwh"
 
     @property
     def native_value(self):
-        return self._data.get("gas_yesterday_kwh")
+        return self._data.get("previous_kwh")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "period_start": self._data.get("previous_period_start"),
+            "period_end": self._data.get("previous_period_end"),
+        }
+
+
+class EonHeatPreviousCostSensor(EonEnergySensorBase):
+    """Cost for the previous billing period (GBP)."""
+
+    _attr_name = "E.ON Heat Last Period Cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "GBP"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:cash-minus"
+
+    def __init__(self, coordinator, account_number):
+        super().__init__(coordinator, account_number)
+        self._attr_unique_id = f"{account_number}__eon_heat_previous_cost"
+
+    @property
+    def native_value(self):
+        return self._data.get("previous_cost_gbp")
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "period_start": self._data.get("previous_period_start"),
+            "period_end": self._data.get("previous_period_end"),
+        }
 
 
 class EonEnergyAccountSensor(EonEnergySensorBase):

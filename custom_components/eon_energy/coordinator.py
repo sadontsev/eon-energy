@@ -32,77 +32,72 @@ class EonEnergyCoordinator(DataUpdateCoordinator):
         try:
             raw = await self.api.async_get_consumption()
         except EonEnergyAuthError as err:
-            _LOGGER.error("Authentication error during E.ON Energy update: %s", err)
             raise ConfigEntryAuthFailed(str(err)) from err
         except EonEnergyApiError as err:
             raise UpdateFailed(f"E.ON Energy API error: {err}") from err
 
+        _LOGGER.debug("Raw consumption response: %s", raw)
         return self._parse_consumption(raw)
 
     @staticmethod
     def _parse_consumption(raw: Any) -> dict[str, Any]:
-        """Parse the /accounts/meters/consumption response into a flat dict.
+        """Parse the /accounts/meters/consumption response.
 
-        The exact schema is unknown until the first real API response, so we
-        use defensive .get() access throughout and store the raw payload too.
+        Response schema:
+          {
+            "account": "400123723366",
+            "consumptionData": [
+              {
+                "periodStart": "2026-03-01T00:00:00.000",
+                "periodEnd":   "2026-03-08T00:00:00.000",
+                "meterPointIdentifier": "KBKBERPH5DH4H.01",
+                "consumption":       {"amount": 65,   "unit": "kWh"},
+                "consumptionCharge": {"amount": 4.95, "unit": "GBP"}
+              }, ...
+            ]
+          }
+        Periods are sorted ascending; the last entry is the current (incomplete) period.
         """
+        result: dict[str, Any] = {}
+
         if not isinstance(raw, dict):
-            _LOGGER.warning(
-                "Unexpected consumption response type: %s — storing raw only",
-                type(raw).__name__,
-            )
-            return {"raw": raw}
+            _LOGGER.warning("Unexpected response type %s", type(raw).__name__)
+            return result
 
-        parsed: dict[str, Any] = {"raw": raw}
+        periods = raw.get("consumptionData", [])
+        if not isinstance(periods, list) or not periods:
+            _LOGGER.warning("No consumptionData in response: %s", raw)
+            return result
 
-        # --- Electricity ---
-        elec = raw.get("electricity") or raw.get("electricityConsumption") or {}
-        if isinstance(elec, dict):
-            parsed["electricity_today_kwh"] = _safe_float(
-                elec.get("today") or elec.get("todayKwh") or elec.get("consumption")
+        # Sort ascending by periodStart so the last entry is always current
+        try:
+            periods = sorted(periods, key=lambda p: p.get("periodStart", ""))
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+        current = periods[-1]
+        result["current_period_start"] = current.get("periodStart")
+        result["current_period_end"] = current.get("periodEnd")
+        result["current_kwh"] = _safe_float(
+            current.get("consumption", {}).get("amount")
+        )
+        result["current_cost_gbp"] = _safe_float(
+            current.get("consumptionCharge", {}).get("amount")
+        )
+
+        if len(periods) >= 2:
+            previous = periods[-2]
+            result["previous_period_start"] = previous.get("periodStart")
+            result["previous_period_end"] = previous.get("periodEnd")
+            result["previous_kwh"] = _safe_float(
+                previous.get("consumption", {}).get("amount")
             )
-            parsed["electricity_yesterday_kwh"] = _safe_float(
-                elec.get("yesterday") or elec.get("yesterdayKwh")
+            result["previous_cost_gbp"] = _safe_float(
+                previous.get("consumptionCharge", {}).get("amount")
             )
 
-        # --- Gas ---
-        gas = raw.get("gas") or raw.get("gasConsumption") or {}
-        if isinstance(gas, dict):
-            parsed["gas_today_kwh"] = _safe_float(
-                gas.get("today") or gas.get("todayKwh") or gas.get("consumption")
-            )
-            parsed["gas_yesterday_kwh"] = _safe_float(
-                gas.get("yesterday") or gas.get("yesterdayKwh")
-            )
-
-        # Handle array-style response (list of meter objects)
-        meters = raw.get("meters") or raw.get("data") or []
-        if isinstance(meters, list):
-            for meter in meters:
-                if not isinstance(meter, dict):
-                    continue
-                fuel = str(meter.get("fuelType") or meter.get("type") or "").lower()
-                today_kwh = _safe_float(
-                    meter.get("todayConsumption")
-                    or meter.get("today")
-                    or meter.get("consumption")
-                )
-                yesterday_kwh = _safe_float(
-                    meter.get("yesterdayConsumption") or meter.get("yesterday")
-                )
-                if "elec" in fuel or "electricity" in fuel:
-                    if today_kwh is not None:
-                        parsed["electricity_today_kwh"] = today_kwh
-                    if yesterday_kwh is not None:
-                        parsed["electricity_yesterday_kwh"] = yesterday_kwh
-                elif "gas" in fuel:
-                    if today_kwh is not None:
-                        parsed["gas_today_kwh"] = today_kwh
-                    if yesterday_kwh is not None:
-                        parsed["gas_yesterday_kwh"] = yesterday_kwh
-
-        _LOGGER.debug("Parsed consumption data: %s", parsed)
-        return parsed
+        _LOGGER.debug("Parsed consumption: %s", result)
+        return result
 
 
 def _safe_float(value: Any) -> float | None:
