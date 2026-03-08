@@ -3,9 +3,10 @@
     "step": {
       "user": {
         "title": "E.ON Energy",
-        "description": "Paste your token data from the E.ON Energy website.\n\nHow to get it:\n1. Log in at www.eonenergy.com in Chrome\n2. Open DevTools → Application → Local Storage → https://www.eonenergy.com\n3. Find the key starting with **@@auth0spajs@@** and copy its full JSON value\n\nAlternatively, paste just the **id_token** JWT string.\n\nTokens are valid for ~10 hours. HA will prompt you to re-authenticate when they expire.",
+        "description": "Paste your token data from the E.ON Energy website.\n\nHow to get it:\n1. Log in at www.eonenergy.com in Chrome\n2. Open DevTools → Application → Local Storage → https://www.eonenergy.com\n3. Find the key starting with **@@auth0spajs@@** and copy its full JSON value\n\nAlternatively, paste just the **id_token** JWT string.\n\nThe **fetch day** is the day of month the integration will call the API to refresh data. Tokens expire after ~10 hours, so choose a day when you can log in and re-authenticate if prompted. Billing periods typically close at the end of each month — day 5–10 is a safe default.",
         "data": {
-          "token_data": "Token data (JSON or id_token)"
+          "token_data": "Token data (JSON or id_token)",
+          "fetch_day": "Fetch day of month (1–28)"
         }
       },
       "reauth_confirm": {
@@ -24,6 +25,17 @@
     "abort": {
       "already_configured": "E.ON Energy account is already configured.",
       "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "E.ON Energy options",
+        "description": "Choose which day of each month the integration should fetch updated consumption data from the API. On all other days it serves the last cached reading without contacting E.ON or raising any errors.",
+        "data": {
+          "fetch_day": "Fetch day of month (1–28)"
+        }
+      }
     }
   }
 }

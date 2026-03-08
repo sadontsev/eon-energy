@@ -16,7 +16,9 @@ from .api import EonEnergyApi, EonEnergyAuthError
 from .const import (
     CONF_ACCOUNT_NUMBER,
     CONF_BEARER_TOKEN,
+    CONF_FETCH_DAY,
     CONF_TOKEN_EXPIRY,
+    DEFAULT_FETCH_DAY,
     DOMAIN,
 )
 
@@ -33,6 +35,10 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._reauth_entry: ConfigEntry | None = None
 
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return EonEnergyOptionsFlow(config_entry)
+
     async def _validate(self, raw: str) -> dict[str, Any]:
         """Validate token input and return entry data dict."""
         api = EonEnergyApi()
@@ -47,7 +53,7 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await api.async_close()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        """Show token entry form."""
+        """Show token + fetch-day form."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -61,11 +67,21 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(entry_data[CONF_ACCOUNT_NUMBER])
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title="E.ON Energy", data=entry_data)
+                fetch_day = user_input[CONF_FETCH_DAY]
+                return self.async_create_entry(
+                    title="E.ON Energy",
+                    data=entry_data,
+                    options={CONF_FETCH_DAY: fetch_day},
+                )
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_TOKEN_INPUT): cv.string}),
+            data_schema=vol.Schema({
+                vol.Required(CONF_TOKEN_INPUT): cv.string,
+                vol.Required(CONF_FETCH_DAY, default=DEFAULT_FETCH_DAY): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=28)
+                ),
+            }),
             errors=errors,
         )
 
@@ -81,7 +97,7 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ):
-        """Handle re-auth form."""
+        """Handle re-auth form (token only — fetch day unchanged)."""
         errors: dict[str, str] = {}
 
         if self._reauth_entry is None:
@@ -106,4 +122,29 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reauth_confirm",
             data_schema=vol.Schema({vol.Required(CONF_TOKEN_INPUT): cv.string}),
             errors=errors,
+        )
+
+
+class EonEnergyOptionsFlow(config_entries.OptionsFlow):
+    """Allow the user to change the monthly fetch day."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        current_day = self._config_entry.options.get(CONF_FETCH_DAY, DEFAULT_FETCH_DAY)
+
+        if user_input is not None:
+            return self.async_create_entry(
+                title="",
+                data={CONF_FETCH_DAY: user_input[CONF_FETCH_DAY]},
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required(CONF_FETCH_DAY, default=current_day): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=28)
+                ),
+            }),
         )
