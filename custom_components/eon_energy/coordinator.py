@@ -47,8 +47,10 @@ class EonEnergyCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict[str, Any]:
         today = dt_util.now().day
+        is_fetch_day = today == self._fetch_day
 
-        if today != self._fetch_day:
+        if not is_fetch_day and self._stored_data:
+            # Normal non-fetch day: return cached data, no network call
             _LOGGER.debug(
                 "E.ON Energy: not fetch day (today=%d, fetch_day=%d) — using stored data",
                 today,
@@ -56,23 +58,39 @@ class EonEnergyCoordinator(DataUpdateCoordinator):
             )
             return self._stored_data
 
-        _LOGGER.debug("E.ON Energy: fetch day %d — calling API", self._fetch_day)
+        if not is_fetch_day and not self._stored_data:
+            # No cached data yet (fresh install or config migration) — attempt a
+            # one-time bootstrap fetch. If the token is expired, log and stay empty;
+            # do NOT raise ConfigEntryAuthFailed (the fetch day hasn't arrived yet).
+            _LOGGER.debug("E.ON Energy: no stored data — attempting bootstrap fetch")
+            try:
+                raw = await self.api.async_get_consumption()
+                parsed = _parse_consumption(raw)
+                self._stored_data = parsed
+                self._on_data_persisted(parsed)
+                return parsed
+            except (EonEnergyAuthError, EonEnergyApiError) as err:
+                _LOGGER.debug(
+                    "E.ON Energy: bootstrap fetch failed (token may be expired, "
+                    "data will populate on fetch day %d): %s",
+                    self._fetch_day,
+                    err,
+                )
+                return {}
 
+        # It is the fetch day — try to fetch and prompt re-auth if token expired
+        _LOGGER.debug("E.ON Energy: fetch day %d — calling API", self._fetch_day)
         try:
             raw = await self.api.async_get_consumption()
         except EonEnergyAuthError as err:
-            # Token expired on fetch day → prompt user to re-authenticate
             raise ConfigEntryAuthFailed(str(err)) from err
         except EonEnergyApiError as err:
             raise UpdateFailed(f"E.ON Energy API error: {err}") from err
 
         _LOGGER.debug("E.ON Energy raw response: %s", raw)
         parsed = _parse_consumption(raw)
-
-        # Persist so the data survives HA restarts
         self._stored_data = parsed
         self._on_data_persisted(parsed)
-
         return parsed
 
     # ------------------------------------------------------------------
