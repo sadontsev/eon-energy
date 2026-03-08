@@ -3,21 +3,21 @@
     "step": {
       "user": {
         "title": "E.ON Energy",
-        "description": "Paste your Auth0 refresh token below.\n\nHow to get it:\n1. Log in to www.eonenergy.com in Chrome/Firefox\n2. Open DevTools → Network tab (F12)\n3. Filter requests by **/oauth/token**\n4. Find the POST to auth.eonenergy.com — click it\n5. Open the **Response** tab\n6. Copy the **refresh_token** value (long string starting with the provider prefix)\n\nThe integration will use this token to fetch new access tokens automatically.",
+        "description": "Paste your token data from the E.ON Energy website.\n\nHow to get it:\n1. Log in at www.eonenergy.com in Chrome\n2. Open DevTools → Application → Local Storage → https://www.eonenergy.com\n3. Find the key starting with **@@auth0spajs@@** and copy its full JSON value\n\nAlternatively, paste just the **id_token** JWT string.\n\nTokens are valid for ~10 hours. HA will prompt you to re-authenticate when they expire.",
         "data": {
-          "refresh_token": "Refresh token"
+          "token_data": "Token data (JSON or id_token)"
         }
       },
       "reauth_confirm": {
         "title": "Re-authenticate E.ON Energy",
-        "description": "Your E.ON Energy session has expired. Paste a new refresh token.\n\nLog in to www.eonenergy.com, open DevTools → Network → filter /oauth/token, copy the refresh_token from the POST response.",
+        "description": "Your E.ON Energy token has expired. Log in at www.eonenergy.com, then copy fresh token data from DevTools → Application → Local Storage → @@auth0spajs@@ key.",
         "data": {
-          "refresh_token": "Refresh token"
+          "token_data": "Token data (JSON or id_token)"
         }
       }
     },
     "error": {
-      "invalid_auth": "The refresh token was rejected. Make sure you copied the full refresh_token value from the /oauth/token response.",
+      "invalid_auth": "Token rejected or expired. Make sure you copied the full JSON value or a valid id_token JWT.",
       "cannot_connect": "Unable to reach the E.ON Energy service. Check your internet connection and try again.",
       "unknown": "An unexpected error occurred. Check the Home Assistant logs for details."
     },

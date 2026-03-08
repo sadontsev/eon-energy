@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
-from .api import EonEnergyApi, EonEnergyApiError, EonEnergyAuthError
+from .api import EonEnergyApi, EonEnergyAuthError
 from .const import (
-    CONF_ACCESS_TOKEN,
     CONF_ACCOUNT_NUMBER,
-    CONF_REFRESH_TOKEN,
+    CONF_BEARER_TOKEN,
     CONF_TOKEN_EXPIRY,
     PLATFORMS,
 )
@@ -22,51 +21,22 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     """Set up E.ON Energy from a config entry."""
+    bearer_token = entry.data.get(CONF_BEARER_TOKEN, "")
+    token_expiry = entry.data.get(CONF_TOKEN_EXPIRY, 0.0)
+    account_number = entry.data.get(CONF_ACCOUNT_NUMBER, "")
+
+    if not bearer_token:
+        raise ConfigEntryAuthFailed("No token stored — please re-authenticate")
+
     api = EonEnergyApi()
+    api.restore_tokens(bearer_token, token_expiry, account_number)
 
-    def _on_tokens_updated(
-        access_token: str | None,
-        refresh_token: str | None,
-        token_expiry: float,
-        account_number: str | None,
-    ) -> None:
-        """Persist refreshed tokens to the config entry."""
-        updates: dict = {}
-        if access_token and access_token != entry.data.get(CONF_ACCESS_TOKEN):
-            updates[CONF_ACCESS_TOKEN] = access_token
-        if refresh_token and refresh_token != entry.data.get(CONF_REFRESH_TOKEN):
-            updates[CONF_REFRESH_TOKEN] = refresh_token
-        if token_expiry != entry.data.get(CONF_TOKEN_EXPIRY):
-            updates[CONF_TOKEN_EXPIRY] = token_expiry
-        if updates:
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, **updates}
-            )
-
-    api.set_token_update_callback(_on_tokens_updated)
-
-    stored_access = entry.data.get(CONF_ACCESS_TOKEN, "")
-    stored_refresh = entry.data.get(CONF_REFRESH_TOKEN, "")
-    stored_expiry = entry.data.get(CONF_TOKEN_EXPIRY, 0.0)
-    stored_account = entry.data.get(CONF_ACCOUNT_NUMBER, "")
-
-    if not stored_refresh:
-        # No refresh token stored — the user must go through config flow again
-        await api.async_close()
-        raise ConfigEntryAuthFailed("No refresh token — please re-authenticate")
-
-    api.restore_tokens(stored_access, stored_refresh, stored_expiry, stored_account)
-
-    # Validate session: refresh the token before first coordinator run
+    # Validate the token is still usable before first coordinator run
     try:
-        await api.async_refresh_token()
-        _LOGGER.debug("E.ON Energy: session established via stored refresh token")
+        await api.async_get_token()
     except EonEnergyAuthError as err:
         await api.async_close()
         raise ConfigEntryAuthFailed(str(err)) from err
-    except EonEnergyApiError as err:
-        await api.async_close()
-        raise ConfigEntryNotReady(f"E.ON Energy API unreachable: {err}") from err
 
     coordinator = EonEnergyCoordinator(hass, api)
 
