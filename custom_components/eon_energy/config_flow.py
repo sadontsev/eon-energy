@@ -17,10 +17,8 @@ from .const import (
     CONF_ACCOUNT_NUMBER,
     CONF_BEARER_TOKEN,
     CONF_FETCH_DAY,
-    CONF_MONTHLY_SERVICE_CHARGE,
     CONF_TOKEN_EXPIRY,
     DEFAULT_FETCH_DAY,
-    DEFAULT_MONTHLY_SERVICE_CHARGE,
     DOMAIN,
 )
 
@@ -30,8 +28,6 @@ CONF_TOKEN_INPUT = "token_data"
 
 
 class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle E.ON Energy config flow."""
-
     VERSION = 1
 
     def __init__(self) -> None:
@@ -42,7 +38,6 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return EonEnergyOptionsFlow(config_entry)
 
     async def _validate(self, raw: str) -> dict[str, Any]:
-        """Validate token input and return entry data dict."""
         api = EonEnergyApi()
         try:
             account_number = await api.async_validate_token_data(raw)
@@ -55,7 +50,6 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await api.async_close()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        """Show token + fetch-day form."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -72,10 +66,7 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title="E.ON Energy",
                     data=entry_data,
-                    options={
-                        CONF_FETCH_DAY: user_input[CONF_FETCH_DAY],
-                        CONF_MONTHLY_SERVICE_CHARGE: user_input[CONF_MONTHLY_SERVICE_CHARGE],
-                    },
+                    options={CONF_FETCH_DAY: user_input[CONF_FETCH_DAY]},
                 )
 
         return self.async_show_form(
@@ -85,15 +76,11 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_FETCH_DAY, default=DEFAULT_FETCH_DAY): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=28)
                 ),
-                vol.Required(
-                    CONF_MONTHLY_SERVICE_CHARGE, default=DEFAULT_MONTHLY_SERVICE_CHARGE
-                ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             }),
             errors=errors,
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]):
-        """Initiate re-auth flow."""
         del entry_data
         entry_id = self.context.get("entry_id")
         if not isinstance(entry_id, str):
@@ -101,10 +88,7 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._reauth_entry = self.hass.config_entries.async_get_entry(entry_id)
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ):
-        """Handle re-auth form (token only — fetch day unchanged)."""
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
 
         if self._reauth_entry is None:
@@ -133,25 +117,16 @@ class EonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class EonEnergyOptionsFlow(config_entries.OptionsFlow):
-    """Allow the user to change the monthly fetch day."""
-
     def __init__(self, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         current_day = self._config_entry.options.get(CONF_FETCH_DAY, DEFAULT_FETCH_DAY)
-        current_charge = self._config_entry.options.get(
-            CONF_MONTHLY_SERVICE_CHARGE, DEFAULT_MONTHLY_SERVICE_CHARGE
-        )
 
         if user_input is not None:
-            return self.async_create_entry(
-                title="",
-                data={
-                    CONF_FETCH_DAY: user_input[CONF_FETCH_DAY],
-                    CONF_MONTHLY_SERVICE_CHARGE: user_input[CONF_MONTHLY_SERVICE_CHARGE],
-                },
-            )
+            return self.async_create_entry(title="", data={
+                CONF_FETCH_DAY: user_input[CONF_FETCH_DAY],
+            })
 
         return self.async_show_form(
             step_id="init",
@@ -159,8 +134,5 @@ class EonEnergyOptionsFlow(config_entries.OptionsFlow):
                 vol.Required(CONF_FETCH_DAY, default=current_day): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=28)
                 ),
-                vol.Required(
-                    CONF_MONTHLY_SERVICE_CHARGE, default=current_charge
-                ): vol.All(vol.Coerce(float), vol.Range(min=0)),
             }),
         )

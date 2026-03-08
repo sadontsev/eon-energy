@@ -25,34 +25,22 @@ async def async_setup_entry(
     config_entry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up E.ON Energy sensors from a config entry."""
     coordinator: EonEnergyCoordinator = config_entry.runtime_data
     acct = config_entry.data.get("account_number", "")
 
     async_add_entities([
-        # Current period
         EonHeatCurrentKwhSensor(coordinator, acct),
-        EonHeatCurrentConsumptionChargeSensor(coordinator, acct),
-        EonHeatCurrentServiceChargeSensor(coordinator, acct),
-        EonHeatCurrentTotalCostSensor(coordinator, acct),
-        # Previous period
+        EonHeatCurrentChargeSensor(coordinator, acct),
         EonHeatPreviousKwhSensor(coordinator, acct),
-        EonHeatPreviousConsumptionChargeSensor(coordinator, acct),
-        EonHeatPreviousServiceChargeSensor(coordinator, acct),
-        EonHeatPreviousTotalCostSensor(coordinator, acct),
-        # Diagnostic
+        EonHeatPreviousChargeSensor(coordinator, acct),
         EonEnergyAccountSensor(coordinator, acct),
     ])
 
 
-# ---------------------------------------------------------------------------
-# Base
-# ---------------------------------------------------------------------------
-
 class _EonBase(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator: EonEnergyCoordinator, account_number: str) -> None:
+    def __init__(self, coordinator: EonEnergyCoordinator, acct: str) -> None:
         super().__init__(coordinator)
-        self._acct = account_number
+        self._acct = acct
 
     @property
     def _data(self) -> dict[str, Any]:
@@ -112,8 +100,8 @@ class EonHeatCurrentKwhSensor(_EonBase):
         return self._period_attrs("current")
 
 
-class EonHeatCurrentConsumptionChargeSensor(_EonBase):
-    _attr_name = "E.ON Heat This Period Consumption Charge"
+class EonHeatCurrentChargeSensor(_EonBase):
+    _attr_name = "E.ON Heat This Period Charge"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "GBP"
     _attr_state_class = SensorStateClass.TOTAL
@@ -121,59 +109,11 @@ class EonHeatCurrentConsumptionChargeSensor(_EonBase):
 
     def __init__(self, coordinator, acct):
         super().__init__(coordinator, acct)
-        self._attr_unique_id = f"{acct}__eon_heat_current_consumption_charge"
+        self._attr_unique_id = f"{acct}__eon_heat_current_charge"
 
     @property
     def native_value(self):
-        return self._data.get("current_consumption_charge_gbp")
-
-    @property
-    def last_reset(self):
-        return self._last_reset("current")
-
-    @property
-    def extra_state_attributes(self):
-        return self._period_attrs("current")
-
-
-class EonHeatCurrentServiceChargeSensor(_EonBase):
-    _attr_name = "E.ON Heat This Period Service Charge"
-    _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_native_unit_of_measurement = "GBP"
-    _attr_state_class = SensorStateClass.TOTAL
-    _attr_icon = "mdi:calendar-month"
-
-    def __init__(self, coordinator, acct):
-        super().__init__(coordinator, acct)
-        self._attr_unique_id = f"{acct}__eon_heat_current_service_charge"
-
-    @property
-    def native_value(self):
-        return self._data.get("current_service_charge_gbp")
-
-    @property
-    def last_reset(self):
-        return self._last_reset("current")
-
-    @property
-    def extra_state_attributes(self):
-        return self._period_attrs("current")
-
-
-class EonHeatCurrentTotalCostSensor(_EonBase):
-    _attr_name = "E.ON Heat This Period Total"
-    _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_native_unit_of_measurement = "GBP"
-    _attr_state_class = SensorStateClass.TOTAL
-    _attr_icon = "mdi:cash-multiple"
-
-    def __init__(self, coordinator, acct):
-        super().__init__(coordinator, acct)
-        self._attr_unique_id = f"{acct}__eon_heat_current_total"
-
-    @property
-    def native_value(self):
-        return self._data.get("current_total_cost_gbp")
+        return self._data.get("current_charge_gbp")
 
     @property
     def last_reset(self):
@@ -208,8 +148,8 @@ class EonHeatPreviousKwhSensor(_EonBase):
         return self._period_attrs("previous")
 
 
-class EonHeatPreviousConsumptionChargeSensor(_EonBase):
-    _attr_name = "E.ON Heat Last Period Consumption Charge"
+class EonHeatPreviousChargeSensor(_EonBase):
+    _attr_name = "E.ON Heat Last Period Charge"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "GBP"
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -217,51 +157,11 @@ class EonHeatPreviousConsumptionChargeSensor(_EonBase):
 
     def __init__(self, coordinator, acct):
         super().__init__(coordinator, acct)
-        self._attr_unique_id = f"{acct}__eon_heat_previous_consumption_charge"
+        self._attr_unique_id = f"{acct}__eon_heat_previous_charge"
 
     @property
     def native_value(self):
-        return self._data.get("previous_consumption_charge_gbp")
-
-    @property
-    def extra_state_attributes(self):
-        return self._period_attrs("previous")
-
-
-class EonHeatPreviousServiceChargeSensor(_EonBase):
-    _attr_name = "E.ON Heat Last Period Service Charge"
-    _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_native_unit_of_measurement = "GBP"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:calendar-month"
-
-    def __init__(self, coordinator, acct):
-        super().__init__(coordinator, acct)
-        self._attr_unique_id = f"{acct}__eon_heat_previous_service_charge"
-
-    @property
-    def native_value(self):
-        return self._data.get("previous_service_charge_gbp")
-
-    @property
-    def extra_state_attributes(self):
-        return self._period_attrs("previous")
-
-
-class EonHeatPreviousTotalCostSensor(_EonBase):
-    _attr_name = "E.ON Heat Last Period Total"
-    _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_native_unit_of_measurement = "GBP"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:cash-multiple"
-
-    def __init__(self, coordinator, acct):
-        super().__init__(coordinator, acct)
-        self._attr_unique_id = f"{acct}__eon_heat_previous_total"
-
-    @property
-    def native_value(self):
-        return self._data.get("previous_total_cost_gbp")
+        return self._data.get("previous_charge_gbp")
 
     @property
     def extra_state_attributes(self):
